@@ -29,6 +29,12 @@ export interface BoardTheme {
   borderClass?: string;
 }
 
+export interface BoardArrow {
+  from: Square;
+  to: Square;
+  color?: string;
+}
+
 export interface SquareStats {
   square: Square;
   attempts: number;
@@ -49,8 +55,8 @@ export interface UserStats {
   colorTestsAttempted: number;
   colorTestsMissed: number;
   highScores: {
-    lightDarkSprint: number; // time or accuracy
-    lightDarkBlitz: number; // max score in 60s
+    lightDarkSprint: number;
+    lightDarkBlitz: number;
     targetStrikeSprint: number;
     fastTypeSprint: number;
     blindfoldStreak: number;
@@ -77,4 +83,19 @@ export interface DrillSettings {
   autoFlipPerspective: boolean;
   ghostMode: boolean; // edge labels fade 20% every 10 streak
   showCoordinates: boolean;
+  metronomeBpm: number; // 0 = off, 60, 90, 120, 150
+  crosshairGuide: boolean; // Hover highlights file & rank
+}
+
+export interface SessionSummary {
+  mode: DrillMode;
+  totalReps: number;
+  correctHits: number;
+  accuracyPercent: number;
+  avgReactionMs: number;
+  maxStreak: number;
+  slowestSquares: { square: Square; reactionMs: number }[];
+  fastestSquares: { square: Square; reactionMs: number }[];
+  troubleSquaresCreated: Square[];
+  grade: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D';
 }

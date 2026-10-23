@@ -2,19 +2,25 @@ import React, { useState } from 'react';
 import { Square, SquareStats, UserStats } from '../types';
 import { FILES, getQuadrant, getSquareColor, RANKS } from '../utils/chess';
 import { calculateDiagnostics } from '../utils/storage';
-import { Activity, AlertTriangle, CheckCircle2, ChevronRight, Crosshair, HelpCircle, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, ChevronRight, Crosshair, Filter, HelpCircle, Play, TrendingUp, Zap } from 'lucide-react';
 
 export interface HeatmapAnalyticsProps {
   stats: UserStats;
   onSelectTroubleSquare?: (sq: Square) => void;
-  onClose?: () => void;
+  onDrillSubset?: (squares: Square[]) => void;
 }
+
+type FilterScope = 'all' | 'white-queenside' | 'white-kingside' | 'black-queenside' | 'black-kingside' | `rank-${string}` | `file-${string}`;
 
 export const HeatmapAnalytics: React.FC<HeatmapAnalyticsProps> = ({
   stats,
   onSelectTroubleSquare,
+  onDrillSubset,
 }) => {
   const [selectedSquare, setSelectedSquare] = useState<Square | null>('e4');
+  const [filterScope, setFilterScope] = useState<FilterScope>('all');
+  const [hoveredSquareInfo, setHoveredSquareInfo] = useState<Square | null>(null);
+
   const diagnostics = calculateDiagnostics(stats);
 
   const getSquareMastery = (sqStat?: SquareStats): {
@@ -58,6 +64,28 @@ export const HeatmapAnalytics: React.FC<HeatmapAnalyticsProps> = ({
       description: 'Developing (1.0s – 2.0s reflex)',
     };
   };
+
+  // Determine which squares match current filter
+  const isSquareInFilter = (sq: Square): boolean => {
+    if (filterScope === 'all') return true;
+    const quad = getQuadrant(sq);
+    if (filterScope === 'white-queenside') return quad === 'White Queenside';
+    if (filterScope === 'white-kingside') return quad === 'White Kingside';
+    if (filterScope === 'black-queenside') return quad === 'Black Queenside';
+    if (filterScope === 'black-kingside') return quad === 'Black Kingside';
+    if (filterScope.startsWith('rank-')) return sq[1] === filterScope.replace('rank-', '');
+    if (filterScope.startsWith('file-')) return sq[0] === filterScope.replace('file-', '');
+    return true;
+  };
+
+  // Collect list of filtered squares
+  const filteredSquares: Square[] = [];
+  RANKS.forEach((r) => {
+    FILES.forEach((f) => {
+      const sq = `${f}${r}` as Square;
+      if (isSquareInFilter(sq)) filteredSquares.push(sq);
+    });
+  });
 
   const currentSquareStat = selectedSquare ? stats.squares[selectedSquare] : null;
   const currentMastery = currentSquareStat ? getSquareMastery(currentSquareStat) : null;
@@ -116,6 +144,46 @@ export const HeatmapAnalytics: React.FC<HeatmapAnalyticsProps> = ({
         </div>
       </div>
 
+      {/* Interactive Filter Toolbar */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-emerald-400" />
+          <span className="font-bold text-slate-300">Filter Board:</span>
+          <select
+            value={filterScope}
+            onChange={(e) => setFilterScope(e.target.value as FilterScope)}
+            className="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200 font-bold focus:outline-none focus:border-emerald-500 cursor-pointer"
+          >
+            <option value="all">All 64 Squares</option>
+            <option value="white-queenside">White Queenside (a1-d4)</option>
+            <option value="white-kingside">White Kingside (e1-h4)</option>
+            <option value="black-queenside">Black Queenside (a5-d8)</option>
+            <option value="black-kingside">Black Kingside (e5-h8)</option>
+            <optgroup label="Filter by Rank">
+              {RANKS.map((r) => (
+                <option key={r} value={`rank-${r}`}>Rank {r}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Filter by File">
+              {FILES.map((f) => (
+                <option key={f} value={`file-${f}`}>File {f.toUpperCase()}</option>
+              ))}
+            </optgroup>
+          </select>
+        </div>
+
+        {filterScope !== 'all' && onDrillSubset && (
+          <button
+            type="button"
+            onClick={() => onDrillSubset(filteredSquares)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold shadow-md cursor-pointer transition-all active:scale-95"
+          >
+            <Play className="w-3.5 h-3.5 fill-current" />
+            Drill This Subset ({filteredSquares.length} squares)
+          </button>
+        )}
+      </div>
+
       {/* Main Heatmap and Detail Section */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Heatmap Grid (8x8) */}
@@ -125,6 +193,11 @@ export const HeatmapAnalytics: React.FC<HeatmapAnalyticsProps> = ({
               <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
                 <Activity className="w-4 h-4 text-emerald-400" />
                 8x8 Mastery Heatmap
+                {hoveredSquareInfo && (
+                  <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 animate-pop">
+                    Hover: {hoveredSquareInfo.toUpperCase()}
+                  </span>
+                )}
               </h3>
               <p className="text-xs text-slate-400 font-mono">
                 Click any square to inspect metrics or launch focused target drills
@@ -146,13 +219,18 @@ export const HeatmapAnalytics: React.FC<HeatmapAnalyticsProps> = ({
                 const sqStat = stats.squares[sq];
                 const mastery = getSquareMastery(sqStat);
                 const isSelected = selectedSquare === sq;
+                const inFilter = isSquareInFilter(sq);
 
                 return (
                   <button
                     key={sq}
                     type="button"
                     onClick={() => setSelectedSquare(sq)}
-                    className={`relative rounded-md flex flex-col items-center justify-center transition-all duration-150 border cursor-pointer ${mastery.colorClass} ${
+                    onMouseEnter={() => setHoveredSquareInfo(sq)}
+                    onMouseLeave={() => setHoveredSquareInfo(null)}
+                    className={`relative rounded-md flex flex-col items-center justify-center transition-all duration-150 border cursor-pointer ${
+                      inFilter ? mastery.colorClass : 'opacity-20 grayscale border-slate-800'
+                    } ${
                       isSelected ? 'ring-2 ring-white scale-105 z-10' : 'hover:scale-102 hover:brightness-110'
                     }`}
                   >
@@ -280,6 +358,50 @@ export const HeatmapAnalytics: React.FC<HeatmapAnalyticsProps> = ({
               </div>
             )}
           </div>
+
+          {/* Interactive Recent Reaction Sparkline */}
+          {stats.recentReps.length > 0 && (
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-mono font-bold text-slate-300 flex items-center gap-1.5 uppercase">
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                  Reaction Sparkline (Last {stats.recentReps.length} reps)
+                </span>
+                <span className="text-[11px] font-mono text-slate-500">
+                  Speed trend
+                </span>
+              </div>
+
+              {/* Sparkline Visual Bar Chart */}
+              <div className="h-16 flex items-end gap-1 pt-2 border-b border-slate-800/80 pb-1">
+                {stats.recentReps.slice(-30).map((rep, idx) => {
+                  const ms = Math.min(2500, Math.max(200, rep.reactionMs));
+                  const heightPercent = Math.max(15, Math.round(((2500 - ms) / 2300) * 100));
+                  return (
+                    <div
+                      key={idx}
+                      title={`${rep.square.toUpperCase()}: ${rep.reactionMs}ms (${rep.correct ? 'Correct' : 'Missed'})`}
+                      className={`flex-1 rounded-xs transition-all duration-100 hover:scale-110 cursor-pointer ${
+                        !rep.correct
+                          ? 'bg-red-500'
+                          : rep.reactionMs < 700
+                          ? 'bg-emerald-400'
+                          : rep.reactionMs < 1200
+                          ? 'bg-amber-400'
+                          : 'bg-slate-600'
+                      }`}
+                      style={{ height: `${heightPercent}%` }}
+                    />
+                  );
+                })}
+              </div>
+              <div className="flex justify-between items-center text-[10px] font-mono text-slate-500 mt-2">
+                <span>Fast (&lt;700ms)</span>
+                <span>Moderate (1.0s)</span>
+                <span>Slow (&gt;2.0s)</span>
+              </div>
+            </div>
+          )}
 
           {/* Trouble Squares Quick List */}
           {diagnostics.troubleList.length > 0 && (

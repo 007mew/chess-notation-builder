@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { DrillSettings, Square, SquareColor, UserStats } from '../../types';
+import { DrillSettings, SessionSummary, Square, SquareColor, UserStats } from '../../types';
 import { getRandomSquare, getSquareColor } from '../../utils/chess';
-import { recordAttempt, srsManager } from '../../utils/storage';
+import { calculateSessionSummary, recordAttempt, srsManager } from '../../utils/storage';
 import { soundEngine } from '../../utils/audio';
 import confetti from 'canvas-confetti';
 import { Flame, Play, RotateCcw, Timer, Trophy, Zap } from 'lucide-react';
@@ -11,6 +11,7 @@ export interface DrillLightDarkProps {
   settings: DrillSettings;
   onUpdateStats: (newStats: UserStats) => void;
   targetSquareOverride?: Square | null;
+  onDrillComplete?: (summary: SessionSummary) => void;
 }
 
 type DrillSubmode = 'sprint-100' | 'blitz-60' | 'zen';
@@ -20,6 +21,7 @@ export const DrillLightDark: React.FC<DrillLightDarkProps> = ({
   settings,
   onUpdateStats,
   targetSquareOverride,
+  onDrillComplete,
 }) => {
   const [submode, setSubmode] = useState<DrillSubmode>('sprint-100');
   const [isActive, setIsActive] = useState<boolean>(false);
@@ -33,6 +35,12 @@ export const DrillLightDark: React.FC<DrillLightDarkProps> = ({
   const [maxSessionStreak, setMaxSessionStreak] = useState<number>(0);
   const [lastReactionMs, setLastReactionMs] = useState<number | null>(null);
   const [hadReflexBonus, setHadReflexBonus] = useState<boolean>(false);
+
+  // Floating feedback
+  const [floatingFeedback, setFloatingFeedback] = useState<string | null>(null);
+
+  // Session tracking for recap
+  const recordedRepsRef = useRef<{ square: Square; reactionMs: number; correct: boolean }[]>([]);
 
   // Visual feedback states
   const [flashFeedback, setFlashFeedback] = useState<'correct' | 'wrong' | null>(null);
@@ -55,6 +63,25 @@ export const DrillLightDark: React.FC<DrillLightDarkProps> = ({
     speakCurrentSquare(nextSq);
   }, [stats, targetSquareOverride, speakCurrentSquare]);
 
+  const endGame = useCallback(() => {
+    setIsActive(false);
+    setIsGameOver(true);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    soundEngine.playTick(1200);
+
+    if (recordedRepsRef.current.length > 0 && onDrillComplete) {
+      const summary = calculateSessionSummary(
+        'light-dark',
+        recordedRepsRef.current,
+        maxSessionStreak
+      );
+      onDrillComplete(summary);
+    }
+  }, [maxSessionStreak, onDrillComplete]);
+
   const startGame = () => {
     setIsActive(true);
     setIsGameOver(false);
@@ -65,22 +92,14 @@ export const DrillLightDark: React.FC<DrillLightDarkProps> = ({
     setLastReactionMs(null);
     setTimeLeftSec(60);
     setFlashFeedback(null);
+    setFloatingFeedback(null);
+    recordedRepsRef.current = [];
 
     const firstSq = targetSquareOverride || getRandomSquare();
     setCurrentSquare(firstSq);
     setStartTime(performance.now());
     speakCurrentSquare(firstSq);
   };
-
-  const endGame = useCallback(() => {
-    setIsActive(false);
-    setIsGameOver(true);
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    soundEngine.playTick(1200);
-  }, []);
 
   // Blitz Timer countdown
   useEffect(() => {
@@ -115,6 +134,7 @@ export const DrillLightDark: React.FC<DrillLightDarkProps> = ({
 
       setLastReactionMs(reaction);
       setHadReflexBonus(isReflexBonus);
+      recordedRepsRef.current.push({ square: currentSquare, reactionMs: reaction, correct: isCorrect });
 
       if (isCorrect) {
         setFlashFeedback('correct');
@@ -126,6 +146,14 @@ export const DrillLightDark: React.FC<DrillLightDarkProps> = ({
         setCorrectHits((c) => c + 1);
         soundEngine.playCorrect(nextStreak, isReflexBonus);
 
+        if (isReflexBonus) {
+          setFloatingFeedback(`⚡ REFLEX (${reaction}ms)`);
+        } else if (nextStreak % 10 === 0) {
+          setFloatingFeedback(`🔥 COMBO x${nextStreak}!`);
+        } else {
+          setFloatingFeedback(`+1`);
+        }
+
         if (nextStreak > 0 && nextStreak % 25 === 0) {
           confetti({ particleCount: 40, spread: 50, origin: { y: 0.6 } });
         }
@@ -133,13 +161,16 @@ export const DrillLightDark: React.FC<DrillLightDarkProps> = ({
         setFlashFeedback('wrong');
         setCurrentStreak(0);
         soundEngine.playError();
+        setFloatingFeedback(`✕ WRONG COLOR`);
       }
 
-      // Record in user persistent statistics
       const { updatedStats } = recordAttempt(stats, currentSquare, reaction, isCorrect, 'light-dark');
       onUpdateStats(updatedStats);
 
-      setTimeout(() => setFlashFeedback(null), 180);
+      setTimeout(() => {
+        setFlashFeedback(null);
+        setFloatingFeedback(null);
+      }, 350);
 
       const nextRep = repsDone + 1;
       setRepsDone(nextRep);
@@ -159,7 +190,6 @@ export const DrillLightDark: React.FC<DrillLightDarkProps> = ({
   // Global Keyboard bindings: [F] for Dark, [J] for Light, [Space] to restart
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept if user is typing in an input
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
 
       const key = e.key.toLowerCase();
@@ -227,6 +257,13 @@ export const DrillLightDark: React.FC<DrillLightDarkProps> = ({
             : 'border-slate-800'
         }`}
       >
+        {/* Floating feedback badge */}
+        {floatingFeedback && (
+          <div className="absolute top-16 z-30 pointer-events-none px-4 py-1.5 rounded-full bg-slate-950/90 border border-emerald-400/50 text-emerald-400 font-mono text-xs font-bold shadow-xl animate-pop">
+            {floatingFeedback}
+          </div>
+        )}
+
         {/* HUD Header */}
         <div className="w-full flex items-center justify-between text-xs font-mono">
           <div className="flex items-center gap-3">
@@ -243,7 +280,7 @@ export const DrillLightDark: React.FC<DrillLightDarkProps> = ({
                 }`}
               >
                 <Zap className="w-3 h-3 text-amber-400" />
-                {lastReactionMs}ms {hadReflexBonus && '⚡ REFLEX BONUS'}
+                {lastReactionMs}ms {hadReflexBonus && '⚡ REFLEX'}
               </span>
             )}
           </div>

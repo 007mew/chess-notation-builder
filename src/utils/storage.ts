@@ -13,6 +13,8 @@ export const DEFAULT_SETTINGS: DrillSettings = {
   autoFlipPerspective: false,
   ghostMode: false,
   showCoordinates: true,
+  metronomeBpm: 0,
+  crosshairGuide: true,
 };
 
 function createInitialSquareStats(square: Square): SquareStats {
@@ -303,5 +305,61 @@ export function calculateDiagnostics(stats: UserStats) {
     colorConfusionIndex,
     overallAccuracy,
     avgReactionTime,
+  };
+}
+
+/**
+ * Builds an interactive post-drill performance summary with letter grades
+ */
+export function calculateSessionSummary(
+  mode: DrillMode,
+  reps: { square: Square; reactionMs: number; correct: boolean }[],
+  maxStreak: number
+): import('../types').SessionSummary {
+  const totalReps = reps.length;
+  const correctHits = reps.filter((r) => r.correct).length;
+  const accuracyPercent = totalReps > 0 ? Math.round((correctHits / totalReps) * 100) : 0;
+
+  const hitReps = reps.filter((r) => r.correct);
+  const avgReactionMs = hitReps.length > 0
+    ? Math.round(hitReps.reduce((acc, curr) => acc + curr.reactionMs, 0) / hitReps.length)
+    : 0;
+
+  const sortedHits = [...hitReps].sort((a, b) => a.reactionMs - b.reactionMs);
+  const fastestSquares = sortedHits.slice(0, 3).map((r) => ({ square: r.square, reactionMs: r.reactionMs }));
+  const slowestSquares = sortedHits.slice(-3).reverse().map((r) => ({ square: r.square, reactionMs: r.reactionMs }));
+  const troubleSquaresCreated = reps.filter((r) => !r.correct).map((r) => r.square);
+
+  // Grade calculation:
+  // S+: <650ms, >=95% accuracy
+  // S: <850ms, >=90% accuracy
+  // A: <1100ms, >=85% accuracy
+  // B: <1500ms, >=75% accuracy
+  // C: <2000ms, >=60% accuracy
+  // D: otherwise
+  let grade: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D' = 'D';
+  if (accuracyPercent >= 95 && avgReactionMs < 650) {
+    grade = 'S+';
+  } else if (accuracyPercent >= 90 && avgReactionMs < 850) {
+    grade = 'S';
+  } else if (accuracyPercent >= 85 && avgReactionMs < 1100) {
+    grade = 'A';
+  } else if (accuracyPercent >= 75 && avgReactionMs < 1500) {
+    grade = 'B';
+  } else if (accuracyPercent >= 60 && avgReactionMs < 2000) {
+    grade = 'C';
+  }
+
+  return {
+    mode,
+    totalReps,
+    correctHits,
+    accuracyPercent,
+    avgReactionMs,
+    maxStreak,
+    slowestSquares,
+    fastestSquares,
+    troubleSquaresCreated: Array.from(new Set(troubleSquaresCreated)),
+    grade,
   };
 }

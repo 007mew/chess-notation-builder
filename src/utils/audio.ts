@@ -5,6 +5,8 @@ class SoundEngine {
   private soundEnabled: boolean = true;
   private speechEnabled: boolean = false;
   private speechRate: number = 1.1;
+  private metronomeTimer: number | null = null;
+  private metronomeBpm: number = 0;
 
   constructor() {
     // AudioContext will be initialized on first user interaction
@@ -32,6 +34,28 @@ class SoundEngine {
 
   public setSpeechRate(rate: number) {
     this.speechRate = rate;
+  }
+
+  /**
+   * Continuous reflex conditioning metronome
+   */
+  public setMetronome(bpm: number) {
+    this.metronomeBpm = bpm;
+    if (this.metronomeTimer) {
+      clearInterval(this.metronomeTimer);
+      this.metronomeTimer = null;
+    }
+
+    if (bpm > 0 && this.soundEnabled) {
+      const intervalMs = (60 / bpm) * 1000;
+      this.metronomeTimer = window.setInterval(() => {
+        this.playTick(920);
+      }, intervalMs);
+    }
+  }
+
+  public getMetronomeBpm(): number {
+    return this.metronomeBpm;
   }
 
   /**
@@ -185,10 +209,8 @@ class SoundEngine {
     }
 
     try {
-      // Cancel pending utterance to avoid queue buildup
       window.speechSynthesis.cancel();
 
-      // Separate file and rank with a space for distinct phonetics
       const file = square[0].toUpperCase();
       const rank = square[1];
       const text = `${file}, ${rank}`;
@@ -198,7 +220,6 @@ class SoundEngine {
       utterance.pitch = 1.0;
       utterance.lang = 'en-US';
 
-      // Pick an English voice if available
       const voices = window.speechSynthesis.getVoices();
       const englishVoice = voices.find(
         (v) => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Zira'))
@@ -211,6 +232,23 @@ class SoundEngine {
       window.speechSynthesis.speak(utterance);
     } catch {
       // ignore speech errors
+    }
+  }
+
+  /**
+   * Interactive Sound Previews for Settings
+   */
+  public testSound(type: 'correct' | 'error' | 'bonus' | 'tick' | 'speech') {
+    if (type === 'correct') {
+      this.playCorrect(5, false);
+    } else if (type === 'error') {
+      this.playError();
+    } else if (type === 'bonus') {
+      this.playCorrect(10, true);
+    } else if (type === 'tick') {
+      this.playTick(880);
+    } else if (type === 'speech') {
+      this.speakSquare('e4');
     }
   }
 }

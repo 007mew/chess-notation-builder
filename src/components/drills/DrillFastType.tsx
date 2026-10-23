@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ChessBoard } from '../ChessBoard';
 import { VirtualKeypad } from '../VirtualKeypad';
-import { DrillSettings, FileLetter, RankNumber, Square, UserStats } from '../../types';
+import { DrillSettings, FileLetter, RankNumber, SessionSummary, Square, UserStats } from '../../types';
 import { FILES, getRandomSquare, RANKS } from '../../utils/chess';
-import { recordAttempt, srsManager } from '../../utils/storage';
+import { calculateSessionSummary, recordAttempt, srsManager } from '../../utils/storage';
 import { soundEngine } from '../../utils/audio';
 import confetti from 'canvas-confetti';
 import { Flame, Keyboard, Play, RefreshCw, Zap } from 'lucide-react';
@@ -14,6 +14,8 @@ export interface DrillFastTypeProps {
   onUpdateStats: (newStats: UserStats) => void;
   onUpdateSettings: (newSettings: DrillSettings) => void;
   targetSquareOverride?: Square | null;
+  activeSubsetSquares?: Square[] | null;
+  onDrillComplete?: (summary: SessionSummary) => void;
 }
 
 export const DrillFastType: React.FC<DrillFastTypeProps> = ({
@@ -22,14 +24,29 @@ export const DrillFastType: React.FC<DrillFastTypeProps> = ({
   onUpdateStats,
   onUpdateSettings,
   targetSquareOverride,
+  activeSubsetSquares,
+  onDrillComplete,
 }) => {
   const [isActive, setIsActive] = useState<boolean>(false);
   const [targetSquare, setTargetSquare] = useState<Square>('e4');
   const [typedBuffer, setTypedBuffer] = useState<string>('');
   const [startTime, setStartTime] = useState<number>(Date.now());
   const [streak, setStreak] = useState<number>(0);
+  const [sessionReps, setSessionReps] = useState<number>(0);
+  const [sprintTarget, setSprintTarget] = useState<number | null>(30);
   const [lastReactionMs, setLastReactionMs] = useState<number | null>(null);
   const [showKeypad, setShowKeypad] = useState<boolean>(true);
+
+  // Floating feedback
+  const [floatingFeedback, setFloatingFeedback] = useState<{
+    text: string;
+    subtext?: string;
+    type: 'bonus' | 'streak' | 'correct' | 'wrong';
+  } | null>(null);
+
+  // Session stats tracking
+  const recordedRepsRef = useRef<{ square: Square; reactionMs: number; correct: boolean }[]>([]);
+  const maxSessionStreakRef = useRef<number>(0);
 
   // Visual cues
   const [wrongFlash, setWrongFlash] = useState<boolean>(false);
@@ -41,8 +58,16 @@ export const DrillFastType: React.FC<DrillFastTypeProps> = ({
     ? Math.max(0, 1.0 - Math.floor(streak / 10) * 0.2)
     : 1.0;
 
+  const getNextTarget = useCallback((): Square => {
+    if (targetSquareOverride) return targetSquareOverride;
+    if (activeSubsetSquares && activeSubsetSquares.length > 0) {
+      return activeSubsetSquares[Math.floor(Math.random() * activeSubsetSquares.length)];
+    }
+    return srsManager.getNextSquare(stats);
+  }, [targetSquareOverride, activeSubsetSquares, stats]);
+
   const nextSquare = useCallback(() => {
-    const sq = targetSquareOverride || srsManager.getNextSquare(stats);
+    const sq = getNextTarget();
     setTargetSquare(sq);
     setTypedBuffer('');
     setStartTime(performance.now());
@@ -54,20 +79,124 @@ export const DrillFastType: React.FC<DrillFastTypeProps> = ({
         perspective: settings.perspective === 'white' ? 'black' : 'white',
       });
     }
-  }, [stats, targetSquareOverride, settings, onUpdateSettings]);
+  }, [getNextTarget, settings, onUpdateSettings]);
 
   const startGame = () => {
     setIsActive(true);
     setStreak(0);
+    setSessionReps(0);
     setLastReactionMs(null);
     setTypedBuffer('');
     setWrongFlash(false);
     setSuccessSquare(null);
+    setFloatingFeedback(null);
+    recordedRepsRef.current = [];
+    maxSessionStreakRef.current = 0;
 
-    const firstSq = targetSquareOverride || getRandomSquare();
+    const firstSq = getNextTarget() || getRandomSquare();
     setTargetSquare(firstSq);
     setStartTime(performance.now());
   };
+
+  const handleSuccess = useCallback(() => {
+    const reaction = Math.round(performance.now() - startTime);
+    setLastReactionMs(reaction);
+    setSuccessSquare(targetSquare);
+    const nextStreak = streak + 1;
+    setStreak(nextStreak);
+    if (nextStreak > maxSessionStreakRef.current) {
+      maxSessionStreakRef.current = nextStreak;
+    }
+
+    recordedRepsRef.current.push({ square: targetSquare, reactionMs: reaction, correct: true });
+
+    const isReflexBonus = reaction < 500;
+    soundEngine.playCorrect(nextStreak, isReflexBonus);
+
+    if (isReflexBonus) {
+      setFloatingFeedback({
+        text: `⚡ REFLEX SPEED (${reaction}ms)`,
+        type: 'bonus',
+      });
+    } else if (nextStreak % 10 === 0) {
+      setFloatingFeedback({
+        text: `🔥 STREAK x${nextStreak}!`,
+        type: 'streak',
+      });
+    } else {
+      setFloatingFeedback({
+        text: `✓ ${targetSquare.toUpperCase()} (${reaction}ms)`,
+        type: 'correct',
+      });
+    }
+
+    if (nextStreak > 0 && nextStreak % 25 === 0) {
+      confetti({ particleCount: 50, spread: 60 });
+    }
+
+    const { updatedStats } = recordAttempt(stats, targetSquare, reaction, true, 'fast-type');
+    onUpdateStats(updatedStats);
+
+    const nextReps = sessionReps + 1;
+    setSessionReps(nextReps);
+
+    setTimeout(() => {
+      setSuccessSquare(null);
+      setFloatingFeedback(null);
+
+      if (sprintTarget && nextReps >= sprintTarget) {
+        setIsActive(false);
+        const summary = calculateSessionSummary(
+          'fast-type',
+          recordedRepsRef.current,
+          maxSessionStreakRef.current
+        );
+        onDrillComplete?.(summary);
+        return;
+      }
+
+      nextSquare();
+    }, 180);
+  }, [startTime, targetSquare, streak, stats, onUpdateStats, sessionReps, sprintTarget, onDrillComplete, nextSquare]);
+
+  const handleFailure = useCallback(() => {
+    const reaction = Math.round(performance.now() - startTime);
+    setWrongFlash(true);
+    setStreak(0);
+    setTypedBuffer('');
+    soundEngine.playError();
+
+    recordedRepsRef.current.push({ square: targetSquare, reactionMs: reaction, correct: false });
+
+    setFloatingFeedback({
+      text: `✕ Missed (${targetSquare.toUpperCase()})`,
+      type: 'wrong',
+    });
+
+    const { updatedStats } = recordAttempt(stats, targetSquare, reaction, false, 'fast-type');
+    onUpdateStats(updatedStats);
+
+    const nextReps = sessionReps + 1;
+    setSessionReps(nextReps);
+
+    setTimeout(() => {
+      setWrongFlash(false);
+      setFloatingFeedback(null);
+
+      if (sprintTarget && nextReps >= sprintTarget) {
+        setIsActive(false);
+        const summary = calculateSessionSummary(
+          'fast-type',
+          recordedRepsRef.current,
+          maxSessionStreakRef.current
+        );
+        onDrillComplete?.(summary);
+        return;
+      }
+
+      nextSquare();
+    }, 320);
+  }, [startTime, targetSquare, stats, onUpdateStats, sessionReps, sprintTarget, onDrillComplete, nextSquare]);
 
   const processInputChar = useCallback(
     (char: string) => {
@@ -77,18 +206,14 @@ export const DrillFastType: React.FC<DrillFastTypeProps> = ({
       soundEngine.playKeyClick();
 
       if (typedBuffer.length === 0) {
-        // First character must be file (a-h)
         if (FILES.includes(lower as FileLetter)) {
-          // Check if it matches target's file
           if (lower === targetSquare[0]) {
             setTypedBuffer(lower);
           } else {
-            // Instant error on wrong file
             handleFailure();
           }
         }
       } else if (typedBuffer.length === 1) {
-        // Second character must be rank (1-8)
         if (RANKS.includes(lower as RankNumber)) {
           const fullInput = `${typedBuffer}${lower}` as Square;
           if (fullInput === targetSquare) {
@@ -99,47 +224,8 @@ export const DrillFastType: React.FC<DrillFastTypeProps> = ({
         }
       }
     },
-    [isActive, typedBuffer, targetSquare]
+    [isActive, typedBuffer, targetSquare, handleFailure, handleSuccess]
   );
-
-  const handleSuccess = () => {
-    const reaction = Math.round(performance.now() - startTime);
-    setLastReactionMs(reaction);
-    setSuccessSquare(targetSquare);
-    const nextStreak = streak + 1;
-    setStreak(nextStreak);
-
-    const isReflexBonus = reaction < 500;
-    soundEngine.playCorrect(nextStreak, isReflexBonus);
-
-    if (nextStreak > 0 && nextStreak % 25 === 0) {
-      confetti({ particleCount: 50, spread: 60 });
-    }
-
-    const { updatedStats } = recordAttempt(stats, targetSquare, reaction, true, 'fast-type');
-    onUpdateStats(updatedStats);
-
-    setTimeout(() => {
-      setSuccessSquare(null);
-      nextSquare();
-    }, 150);
-  };
-
-  const handleFailure = () => {
-    const reaction = Math.round(performance.now() - startTime);
-    setWrongFlash(true);
-    setStreak(0);
-    setTypedBuffer('');
-    soundEngine.playError();
-
-    const { updatedStats } = recordAttempt(stats, targetSquare, reaction, false, 'fast-type');
-    onUpdateStats(updatedStats);
-
-    setTimeout(() => {
-      setWrongFlash(false);
-      nextSquare();
-    }, 300);
-  };
 
   // Physical Keyboard listener
   useEffect(() => {
@@ -168,30 +254,41 @@ export const DrillFastType: React.FC<DrillFastTypeProps> = ({
   return (
     <div className="flex flex-col items-center max-w-2xl mx-auto w-full px-2 sm:px-4">
       {/* Board Controls Toolbar */}
-      <div className="flex items-center justify-between w-full max-w-[480px] mb-3 px-1 gap-2 text-xs font-mono">
-        <button
-          type="button"
-          onClick={() =>
-            onUpdateSettings({
-              ...settings,
-              perspective: settings.perspective === 'white' ? 'black' : 'white',
-            })
-          }
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-slate-100 hover:bg-slate-800 cursor-pointer transition-all"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span className="capitalize">{settings.perspective} POV</span>
-        </button>
+      <div className="flex flex-wrap items-center justify-between w-full max-w-[480px] mb-3 px-1 gap-2 text-xs font-mono">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() =>
+              onUpdateSettings({
+                ...settings,
+                perspective: settings.perspective === 'white' ? 'black' : 'white',
+              })
+            }
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-slate-100 hover:bg-slate-800 cursor-pointer transition-all"
+            title="Flip POV [R]"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span className="capitalize">{settings.perspective} POV</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSprintTarget(sprintTarget === 30 ? 50 : sprintTarget === 50 ? null : 30)}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-slate-100 cursor-pointer transition-all"
+          >
+            {sprintTarget ? `${sprintTarget} Reps` : 'Endless'}
+          </button>
+        </div>
 
         <button
           type="button"
           onClick={() => setShowKeypad(!showKeypad)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer transition-all ${
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border cursor-pointer transition-all ${
             showKeypad ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'bg-slate-900 border-slate-800 text-slate-400'
           }`}
         >
           <Keyboard className="w-3.5 h-3.5" />
-          <span>{showKeypad ? 'Hide Virtual Keypad' : 'Show Virtual Keypad'}</span>
+          <span>{showKeypad ? 'Keypad ON' : 'Keypad OFF'}</span>
         </button>
       </div>
 
@@ -203,8 +300,13 @@ export const DrillFastType: React.FC<DrillFastTypeProps> = ({
       >
         <div className="flex items-center gap-4">
           <div className="flex flex-col">
-            <span className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider">
+            <span className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider flex items-center gap-2">
               TYPE SQUARE NAME
+              {activeSubsetSquares && (
+                <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 rounded">
+                  Filtered Subset ({activeSubsetSquares.length})
+                </span>
+              )}
             </span>
             <div className="flex items-center gap-2 mt-1">
               {/* Box 1: File */}
@@ -234,6 +336,11 @@ export const DrillFastType: React.FC<DrillFastTypeProps> = ({
               {lastReactionMs}ms
             </span>
           )}
+          {sprintTarget && (
+            <span className="text-[10px] text-slate-500">
+              Progress: {sessionReps}/{sprintTarget}
+            </span>
+          )}
         </div>
       </div>
 
@@ -247,11 +354,13 @@ export const DrillFastType: React.FC<DrillFastTypeProps> = ({
           highlightSquares={isActive ? [targetSquare] : []}
           targetSquare={successSquare}
           interactive={false}
+          crosshairGuide={settings.crosshairGuide}
+          floatingFeedback={floatingFeedback}
           size="lg"
         />
 
         {!isActive && (
-          <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs rounded-xl flex flex-col items-center justify-center p-6 text-center">
+          <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs rounded-2xl flex flex-col items-center justify-center p-6 text-center">
             <h3 className="text-2xl font-black text-slate-100 font-mono mb-2">
               Pillar 3: Fast Type
             </h3>

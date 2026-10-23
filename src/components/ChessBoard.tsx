@@ -1,5 +1,5 @@
-import React from 'react';
-import { BoardThemeId, Square } from '../types';
+import React, { useState } from 'react';
+import { BoardArrow, BoardThemeId, Square } from '../types';
 import { BOARD_THEMES } from '../utils/themes';
 import { FILES, getSquareColor, RANKS } from '../utils/chess';
 
@@ -19,6 +19,8 @@ export interface ChessBoardProps {
   className?: string;
   size?: 'sm' | 'md' | 'lg';
   faintOutline?: boolean; // for Blindfold Commando mode
+  crosshairGuide?: boolean; // Highlights hovered file and rank
+  floatingFeedback?: { text: string; subtext?: string; type: 'bonus' | 'streak' | 'correct' | 'wrong' } | null;
 }
 
 export const ChessBoard: React.FC<ChessBoardProps> = ({
@@ -37,11 +39,21 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   className = '',
   size = 'lg',
   faintOutline = false,
+  crosshairGuide = false,
+  floatingFeedback = null,
 }) => {
   const theme = BOARD_THEMES[themeId] || BOARD_THEMES['neo-green'];
 
   const displayedFiles = perspective === 'white' ? [...FILES] : [...FILES].reverse();
   const displayedRanks = perspective === 'white' ? [...RANKS].reverse() : [...RANKS];
+
+  // Interactive Hover and Crosshair Guide state
+  const [hoveredSquare, setHoveredSquare] = useState<Square | null>(null);
+
+  // Right-click drawn annotations (arrows & circles)
+  const [customArrows, setCustomArrows] = useState<BoardArrow[]>([]);
+  const [markedSquares, setMarkedSquares] = useState<Square[]>([]);
+  const [dragStartSquare, setDragStartSquare] = useState<Square | null>(null);
 
   const sizeClasses = {
     sm: 'w-64 h-64 text-[10px]',
@@ -49,13 +61,68 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     lg: 'w-full max-w-[480px] aspect-square text-xs sm:text-sm',
   };
 
+  // Helper to convert square to board percentage coordinate (0-100)
+  const getSquareCenterPercent = (sq: Square) => {
+    const file = sq[0];
+    const rank = sq[1];
+    const colIdx = displayedFiles.indexOf(file as typeof FILES[number]);
+    const rowIdx = displayedRanks.indexOf(rank as typeof RANKS[number]);
+    return {
+      x: (colIdx + 0.5) * 12.5,
+      y: (rowIdx + 0.5) * 12.5,
+    };
+  };
+
+  const handleSquareMouseDown = (e: React.MouseEvent, sq: Square) => {
+    if (e.button === 2) {
+      // Right click started
+      e.preventDefault();
+      setDragStartSquare(sq);
+    } else if (e.button === 0) {
+      // Left click clears custom markings
+      if (customArrows.length > 0 || markedSquares.length > 0) {
+        setCustomArrows([]);
+        setMarkedSquares([]);
+      }
+    }
+  };
+
+  const handleSquareMouseUp = (e: React.MouseEvent, sq: Square) => {
+    if (e.button === 2 && dragStartSquare) {
+      e.preventDefault();
+      if (dragStartSquare === sq) {
+        // Toggle marked ring on square
+        setMarkedSquares((prev) =>
+          prev.includes(sq) ? prev.filter((s) => s !== sq) : [...prev, sq]
+        );
+      } else {
+        // Toggle arrow
+        setCustomArrows((prev) => {
+          const exists = prev.some((a) => a.from === dragStartSquare && a.to === sq);
+          if (exists) {
+            return prev.filter((a) => !(a.from === dragStartSquare && a.to === sq));
+          } else {
+            return [...prev, { from: dragStartSquare, to: sq }];
+          }
+        });
+      }
+      setDragStartSquare(null);
+    }
+  };
+
   return (
     <div
-      className={`relative select-none rounded-xl overflow-hidden shadow-2xl transition-all duration-300 border border-slate-700/60 ${theme.borderClass || ''} ${sizeClasses[size]} ${className}`}
+      onContextMenu={(e) => e.preventDefault()}
+      className={`relative select-none rounded-2xl overflow-hidden shadow-2xl transition-all duration-300 border border-slate-700/60 ${theme.borderClass || ''} ${sizeClasses[size]} ${className}`}
       style={{ touchAction: 'manipulation' }}
     >
       {/* Board Grid */}
-      <div className={`grid grid-cols-8 grid-rows-8 w-full h-full ${faintOutline ? 'opacity-20 blur-[1px]' : 'opacity-100'} transition-opacity duration-300`}>
+      <div
+        className={`grid grid-cols-8 grid-rows-8 w-full h-full ${
+          faintOutline ? 'opacity-20 blur-[1px]' : 'opacity-100'
+        } transition-opacity duration-300`}
+        onMouseLeave={() => setHoveredSquare(null)}
+      >
         {displayedRanks.map((rank, rankRowIdx) =>
           displayedFiles.map((file, fileColIdx) => {
             const square: Square = `${file}${rank}` as Square;
@@ -68,9 +135,15 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             const isKnight = knightSquare === square;
             const isLegalKnightMove = legalKnightMoves.includes(square);
             const isSelected = selectedSquares.includes(square);
+            const isMarked = markedSquares.includes(square);
 
             const isBottomRow = rankRowIdx === 7;
             const isLeftCol = fileColIdx === 0;
+
+            // Crosshair guide
+            const isCrosshairRow = crosshairGuide && hoveredSquare && hoveredSquare[1] === rank;
+            const isCrosshairCol = crosshairGuide && hoveredSquare && hoveredSquare[0] === file;
+            const isHovered = hoveredSquare === square;
 
             const bgStyle = isDark
               ? { backgroundColor: theme.darkBg }
@@ -81,6 +154,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 key={square}
                 type="button"
                 onClick={() => interactive && onSquareClick?.(square)}
+                onMouseEnter={() => setHoveredSquare(square)}
+                onMouseDown={(e) => handleSquareMouseDown(e, square)}
+                onMouseUp={(e) => handleSquareMouseUp(e, square)}
                 disabled={!interactive}
                 data-square={square}
                 aria-label={`Square ${square}`}
@@ -89,6 +165,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   !interactive ? 'cursor-default' : 'active:brightness-90'
                 }`}
               >
+                {/* Crosshair Guide Highlight */}
+                {(isCrosshairRow || isCrosshairCol) && !isTarget && !isWrong && (
+                  <div className={`absolute inset-0 pointer-events-none transition-opacity duration-100 ${
+                    isHovered ? 'bg-emerald-400/25 ring-2 ring-emerald-400/60' : 'bg-emerald-400/10'
+                  }`} />
+                )}
+
                 {/* Edge File Labels (along bottom edge of board) */}
                 {showCoordinates && isBottomRow && (
                   <span
@@ -117,38 +200,43 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
                 {/* Target Reticle / Highlight Indicator */}
                 {isTarget && (
-                  <div className="absolute inset-0 bg-emerald-500/40 border-2 border-emerald-400 flex items-center justify-center animate-pulse">
+                  <div className="absolute inset-0 bg-emerald-500/40 border-2 border-emerald-400 flex items-center justify-center animate-pulse z-10">
                     <div className="w-4 h-4 rounded-full bg-emerald-400/80 shadow-[0_0_12px_rgba(52,211,153,0.8)]" />
                   </div>
                 )}
 
                 {/* Highlighted square (e.g. for Fast Type prompt or review) */}
                 {isHighlighted && !isTarget && !isWrong && (
-                  <div className="absolute inset-0 bg-amber-400/35 border-2 border-amber-300 ring-2 ring-amber-400/20" />
+                  <div className="absolute inset-0 bg-amber-400/35 border-2 border-amber-300 ring-2 ring-amber-400/20 z-10" />
                 )}
 
                 {/* Wrong Square flash */}
                 {isWrong && (
-                  <div className="absolute inset-0 bg-red-600/70 border-2 border-red-500 animate-shake flex items-center justify-center">
+                  <div className="absolute inset-0 bg-red-600/70 border-2 border-red-500 animate-shake flex items-center justify-center z-10">
                     <span className="text-white font-bold text-lg">✕</span>
                   </div>
                 )}
 
                 {/* Selected square mark */}
                 {isSelected && (
-                  <div className="absolute inset-0 bg-blue-500/45 border-2 border-blue-400 flex items-center justify-center">
+                  <div className="absolute inset-0 bg-blue-500/45 border-2 border-blue-400 flex items-center justify-center z-10">
                     <span className="text-white font-black text-sm">✓</span>
                   </div>
                 )}
 
+                {/* Right-click marked ring */}
+                {isMarked && (
+                  <div className="absolute inset-1 rounded-full border-4 border-amber-400/80 pointer-events-none z-10 animate-pop" />
+                )}
+
                 {/* Legal Knight Move Dot Marker */}
                 {isLegalKnightMove && !isSelected && (
-                  <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-emerald-500/75 ring-2 ring-emerald-300/40 animate-pulse" />
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-emerald-500/75 ring-2 ring-emerald-300/40 animate-pulse z-10" />
                 )}
 
                 {/* Knight Piece SVG */}
                 {isKnight && (
-                  <div className="relative w-4/5 h-4/5 flex items-center justify-center filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+                  <div className="relative w-4/5 h-4/5 flex items-center justify-center filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] z-10">
                     <svg viewBox="0 0 45 45" className="w-full h-full fill-white stroke-black stroke-[1.5]">
                       <path
                         d="M 22,10 C 32.5,11 38.5,18 38,39 L 15,39 C 15,30 25,32.5 23,18"
@@ -168,6 +256,71 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           })
         )}
       </div>
+
+      {/* SVG Arrows Overlay for Right-Click Tactical Markings */}
+      {customArrows.length > 0 && (
+        <svg className="absolute inset-0 w-full h-full pointer-events-none z-20 overflow-visible">
+          <defs>
+            <marker
+              id="arrowhead"
+              markerWidth="8"
+              markerHeight="6"
+              refX="6"
+              refY="3"
+              orient="auto"
+            >
+              <polygon points="0 0, 8 3, 0 6" fill="#f59e0b" opacity="0.85" />
+            </marker>
+          </defs>
+          {customArrows.map((arrow, idx) => {
+            const start = getSquareCenterPercent(arrow.from);
+            const end = getSquareCenterPercent(arrow.to);
+            return (
+              <line
+                key={idx}
+                x1={`${start.x}%`}
+                y1={`${start.y}%`}
+                x2={`${end.x}%`}
+                y2={`${end.y}%`}
+                stroke="#f59e0b"
+                strokeWidth="5"
+                strokeLinecap="round"
+                opacity="0.8"
+                markerEnd="url(#arrowhead)"
+              />
+            );
+          })}
+        </svg>
+      )}
+
+      {/* Crosshair Hover Coordinate Mini-Badge */}
+      {crosshairGuide && hoveredSquare && (
+        <div className="absolute top-2 left-2 z-30 pointer-events-none px-2 py-0.5 rounded-md bg-slate-950/90 border border-emerald-500/40 text-emerald-400 font-mono text-[11px] font-bold shadow-lg animate-pop">
+          {hoveredSquare.toUpperCase()} ({getSquareColor(hoveredSquare)})
+        </div>
+      )}
+
+      {/* Floating Reaction Toast */}
+      {floatingFeedback && (
+        <div className="absolute inset-x-0 top-1/3 flex flex-col items-center justify-center z-30 pointer-events-none animate-pop">
+          <div
+            className={`px-4 py-2 rounded-2xl font-mono font-black shadow-2xl flex items-center gap-2 border text-sm sm:text-base backdrop-blur-sm ${
+              floatingFeedback.type === 'bonus'
+                ? 'bg-amber-500/90 text-slate-950 border-amber-300 shadow-amber-500/30'
+                : floatingFeedback.type === 'streak'
+                ? 'bg-emerald-500/90 text-slate-950 border-emerald-300 shadow-emerald-500/30'
+                : floatingFeedback.type === 'wrong'
+                ? 'bg-red-600/90 text-white border-red-400 shadow-red-500/30'
+                : 'bg-slate-900/90 text-slate-100 border-slate-700'
+            }`}
+          >
+            <span>{floatingFeedback.text}</span>
+            {floatingFeedback.subtext && (
+              <span className="text-xs opacity-90 font-bold">{floatingFeedback.subtext}</span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Blindfold Overlay if completely invisible */}
       {faintOutline && (

@@ -2,7 +2,7 @@ import React from 'react';
 import { BoardThemeId, DrillSettings } from '../types';
 import { BOARD_THEMES } from '../utils/themes';
 import { soundEngine } from '../utils/audio';
-import { Check, RotateCcw, X } from 'lucide-react';
+import { Check, Crosshair, Play, RotateCcw, Timer, Volume2, X } from 'lucide-react';
 
 export interface SettingsModalProps {
   isOpen: boolean;
@@ -21,9 +21,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  const metronomeOptions = [
+    { label: 'Off', bpm: 0 },
+    { label: '60 BPM', bpm: 60 },
+    { label: '90 BPM', bpm: 90 },
+    { label: '120 BPM', bpm: 120 },
+    { label: '150 BPM', bpm: 150 },
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-pop">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-pop">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <h3 className="text-lg font-bold font-mono text-slate-100">Settings & Sensory Engine</h3>
@@ -70,7 +78,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
-          {/* Audio Reinforcement */}
+          {/* Sensory Reinforcement */}
           <div className="space-y-3 pt-2 border-t border-slate-800/80">
             <div className="flex items-center justify-between">
               <div>
@@ -119,10 +127,121 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 />
               </button>
             </div>
+
+            {/* Metronome Speed */}
+            <div className="pt-1">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-slate-200 uppercase flex items-center gap-1.5">
+                  <Timer className="w-3.5 h-3.5 text-amber-400" />
+                  Rhythm Metronome
+                </span>
+                <span className="text-[11px] text-slate-400">Subconscious timing pulse</span>
+              </div>
+              <div className="grid grid-cols-5 gap-1.5">
+                {metronomeOptions.map((opt) => {
+                  const isSelected = settings.metronomeBpm === opt.bpm;
+                  return (
+                    <button
+                      key={opt.bpm}
+                      type="button"
+                      onClick={() => {
+                        soundEngine.setMetronome(opt.bpm);
+                        onUpdateSettings({ ...settings, metronomeBpm: opt.bpm });
+                      }}
+                      className={`py-1.5 text-center text-xs font-mono font-bold rounded-lg border cursor-pointer transition-all ${
+                        isSelected
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
-          {/* Conditioning Modes */}
+          {/* Interactive Sound Test Lab */}
+          <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
+            <span className="text-xs font-bold text-slate-300 uppercase flex items-center gap-1.5 mb-2.5">
+              <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+              Sound Lab Previews
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[11px]">
+              <button
+                type="button"
+                onClick={() => soundEngine.testSound('correct')}
+                className="py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-emerald-400 font-bold border border-slate-700/60 cursor-pointer flex items-center justify-center gap-1"
+              >
+                <Play className="w-3 h-3 fill-current" />
+                Correct Hit
+              </button>
+              <button
+                type="button"
+                onClick={() => soundEngine.testSound('bonus')}
+                className="py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-amber-400 font-bold border border-slate-700/60 cursor-pointer flex items-center justify-center gap-1"
+              >
+                <Play className="w-3 h-3 fill-current" />
+                Reflex Sparkle
+              </button>
+              <button
+                type="button"
+                onClick={() => soundEngine.testSound('error')}
+                className="py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-red-400 font-bold border border-slate-700/60 cursor-pointer flex items-center justify-center gap-1"
+              >
+                <Play className="w-3 h-3 fill-current" />
+                Error Buzz
+              </button>
+              <button
+                type="button"
+                onClick={() => soundEngine.testSound('tick')}
+                className="py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-sky-400 font-bold border border-slate-700/60 cursor-pointer flex items-center justify-center gap-1"
+              >
+                <Play className="w-3 h-3 fill-current" />
+                Clock Tick
+              </button>
+              <button
+                type="button"
+                onClick={() => soundEngine.testSound('speech')}
+                className="py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-purple-400 font-bold border border-slate-700/60 cursor-pointer flex items-center justify-center gap-1 sm:col-span-2"
+              >
+                <Play className="w-3 h-3 fill-current" />
+                Speech Callout (&quot;E 4&quot;)
+              </button>
+            </div>
+          </div>
+
+          {/* Visual Guides & Conditioning Modes */}
           <div className="space-y-3 pt-2 border-t border-slate-800/80">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs font-bold text-slate-200 uppercase flex items-center gap-1.5">
+                  <Crosshair className="w-3.5 h-3.5 text-emerald-400" />
+                  Crosshair Ray Guide
+                </div>
+                <div className="text-[11px] text-slate-400">Hovering highlights rank & file intersection</div>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  onUpdateSettings({
+                    ...settings,
+                    crosshairGuide: !settings.crosshairGuide,
+                  })
+                }
+                className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${
+                  settings.crosshairGuide ? 'bg-emerald-500' : 'bg-slate-700'
+                }`}
+              >
+                <div
+                  className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
+                    settings.crosshairGuide ? 'left-7' : 'left-1'
+                  }`}
+                />
+              </button>
+            </div>
+
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs font-bold text-slate-200 uppercase">Perspective Inversion</div>

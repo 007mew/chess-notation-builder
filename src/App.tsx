@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { DrillMode, DrillSettings, Square, UserStats } from './types';
+import { useState, useEffect, useCallback } from 'react';
+import { DrillMode, DrillSettings, SessionSummary, Square, UserStats } from './types';
 import {
   getInitialUserStats,
   loadSettings,
@@ -10,6 +10,8 @@ import {
 import { soundEngine } from './utils/audio';
 import { Header } from './components/Header';
 import { SettingsModal } from './components/SettingsModal';
+import { ShortcutsModal } from './components/ShortcutsModal';
+import { PerformanceRecapModal } from './components/PerformanceRecapModal';
 import { DrillLightDark } from './components/drills/DrillLightDark';
 import { DrillTargetStrike } from './components/drills/DrillTargetStrike';
 import { DrillFastType } from './components/drills/DrillFastType';
@@ -23,36 +25,116 @@ export function App() {
   const [settings, setSettings] = useState<DrillSettings>(loadSettings);
   const [stats, setStats] = useState<UserStats>(loadUserStats);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
   const [targetSquareOverride, setTargetSquareOverride] = useState<Square | null>(null);
+  const [activeSubsetSquares, setActiveSubsetSquares] = useState<Square[] | null>(null);
+  const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
 
-  // Sync sound engine config on initial load
+  // Sync sound engine config on initial load & settings change
   useEffect(() => {
     soundEngine.setSoundEnabled(settings.soundEnabled);
     soundEngine.setSpeechEnabled(settings.speechEnabled);
     soundEngine.setSpeechRate(settings.speechRate);
+    soundEngine.setMetronome(settings.metronomeBpm);
   }, [settings]);
 
-  const handleUpdateSettings = (newSettings: DrillSettings) => {
+  const handleUpdateSettings = useCallback((newSettings: DrillSettings) => {
     setSettings(newSettings);
     saveSettings(newSettings);
-  };
+  }, []);
 
-  const handleUpdateStats = (newStats: UserStats) => {
+  const handleUpdateStats = useCallback((newStats: UserStats) => {
     setStats(newStats);
     saveUserStats(newStats);
-  };
+  }, []);
 
-  const handleResetStats = () => {
+  const handleResetStats = useCallback(() => {
     const initial = getInitialUserStats();
     setStats(initial);
     saveUserStats(initial);
-  };
+  }, []);
 
   // Launch target training directly from Heatmap or trouble square clicks
   const handleSelectTroubleSquare = (sq: Square) => {
     setTargetSquareOverride(sq);
+    setActiveSubsetSquares(null);
     setCurrentMode('target-strike');
   };
+
+  // Launch subset training from Heatmap filter
+  const handleDrillSubset = (squares: Square[]) => {
+    setActiveSubsetSquares(squares);
+    setTargetSquareOverride(null);
+    setCurrentMode('target-strike');
+  };
+
+  // Drill completed handler
+  const handleDrillComplete = (summary: SessionSummary) => {
+    setSessionSummary(summary);
+  };
+
+  // Retrain weakest squares from recap
+  const handleTrainWeakest = (squares: Square[]) => {
+    setSessionSummary(null);
+    setActiveSubsetSquares(squares);
+    setTargetSquareOverride(null);
+    setCurrentMode('target-strike');
+  };
+
+  // Global Keyboard Navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
+
+      const key = e.key.toLowerCase();
+
+      // Number keys 1-7 for instant mode switching
+      if (e.key === '1') {
+        setCurrentMode('light-dark');
+        setTargetSquareOverride(null);
+        setActiveSubsetSquares(null);
+      } else if (e.key === '2') {
+        setCurrentMode('target-strike');
+        setTargetSquareOverride(null);
+        setActiveSubsetSquares(null);
+      } else if (e.key === '3') {
+        setCurrentMode('fast-type');
+        setTargetSquareOverride(null);
+        setActiveSubsetSquares(null);
+      } else if (e.key === '4') {
+        setCurrentMode('blindfold');
+      } else if (e.key === '5') {
+        setCurrentMode('knight-hop');
+      } else if (e.key === '6') {
+        setCurrentMode('deathrun');
+      } else if (e.key === '7') {
+        setCurrentMode('heatmap');
+      } else if (key === 'r') {
+        // Toggle board perspective
+        handleUpdateSettings({
+          ...settings,
+          perspective: settings.perspective === 'white' ? 'black' : 'white',
+        });
+      } else if (key === 'm') {
+        // Toggle sound mute
+        const next = !settings.soundEnabled;
+        soundEngine.setSoundEnabled(next);
+        handleUpdateSettings({
+          ...settings,
+          soundEnabled: next,
+        });
+      } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        setIsShortcutsOpen((prev) => !prev);
+      } else if (e.key === 'Escape') {
+        setIsSettingsOpen(false);
+        setIsShortcutsOpen(false);
+        setSessionSummary(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [settings, handleUpdateSettings]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500/30 selection:text-emerald-200">
@@ -61,11 +143,13 @@ export function App() {
         currentMode={currentMode}
         onSelectMode={(mode) => {
           setTargetSquareOverride(null);
+          setActiveSubsetSquares(null);
           setCurrentMode(mode);
         }}
         settings={settings}
         onUpdateSettings={handleUpdateSettings}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenShortcuts={() => setIsShortcutsOpen(true)}
         stats={stats}
       />
 
@@ -77,6 +161,7 @@ export function App() {
             settings={settings}
             onUpdateStats={handleUpdateStats}
             targetSquareOverride={targetSquareOverride}
+            onDrillComplete={handleDrillComplete}
           />
         )}
 
@@ -87,6 +172,8 @@ export function App() {
             onUpdateStats={handleUpdateStats}
             onUpdateSettings={handleUpdateSettings}
             targetSquareOverride={targetSquareOverride}
+            activeSubsetSquares={activeSubsetSquares}
+            onDrillComplete={handleDrillComplete}
           />
         )}
 
@@ -97,6 +184,8 @@ export function App() {
             onUpdateStats={handleUpdateStats}
             onUpdateSettings={handleUpdateSettings}
             targetSquareOverride={targetSquareOverride}
+            activeSubsetSquares={activeSubsetSquares}
+            onDrillComplete={handleDrillComplete}
           />
         )}
 
@@ -123,6 +212,7 @@ export function App() {
             settings={settings}
             onUpdateStats={handleUpdateStats}
             onUpdateSettings={handleUpdateSettings}
+            onDrillComplete={handleDrillComplete}
           />
         )}
 
@@ -130,9 +220,28 @@ export function App() {
           <HeatmapAnalytics
             stats={stats}
             onSelectTroubleSquare={handleSelectTroubleSquare}
+            onDrillSubset={handleDrillSubset}
           />
         )}
       </main>
+
+      {/* Performance Recap Modal */}
+      <PerformanceRecapModal
+        summary={sessionSummary}
+        onClose={() => setSessionSummary(null)}
+        onPlayAgain={() => setSessionSummary(null)}
+        onTrainWeakest={handleTrainWeakest}
+        onViewHeatmap={() => {
+          setSessionSummary(null);
+          setCurrentMode('heatmap');
+        }}
+      />
+
+      {/* Keyboard Shortcuts Modal */}
+      <ShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
+      />
 
       {/* Settings Modal */}
       <SettingsModal

@@ -163,6 +163,7 @@ export const DrillKnightHop: React.FC<DrillKnightHopProps> = ({
           wrongSquare={wrongSquare}
           onSquareClick={handleSquareClick}
           interactive={isActive}
+          crosshairGuide={settings.crosshairGuide}
           size="lg"
         />
 

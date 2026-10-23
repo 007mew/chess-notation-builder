@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ChessBoard } from '../ChessBoard';
 import { VirtualKeypad } from '../VirtualKeypad';
-import { DrillSettings, FileLetter, RankNumber, Square, SquareColor, UserStats } from '../../types';
+import { DrillSettings, FileLetter, RankNumber, SessionSummary, Square, SquareColor, UserStats } from '../../types';
 import { FILES, getRandomSquare, getSquareColor, RANKS } from '../../utils/chess';
-import { recordAttempt } from '../../utils/storage';
+import { calculateSessionSummary, recordAttempt } from '../../utils/storage';
 import { soundEngine } from '../../utils/audio';
 import confetti from 'canvas-confetti';
 import { Flame, Heart, Play, RotateCcw, Skull, Trophy } from 'lucide-react';
@@ -13,6 +13,7 @@ export interface DrillDeathrunProps {
   settings: DrillSettings;
   onUpdateStats: (newStats: UserStats) => void;
   onUpdateSettings: (newSettings: DrillSettings) => void;
+  onDrillComplete?: (summary: SessionSummary) => void;
 }
 
 type GauntletTaskType = 'click-square' | 'color-test' | 'type-square';
@@ -21,6 +22,7 @@ export const DrillDeathrun: React.FC<DrillDeathrunProps> = ({
   stats,
   settings,
   onUpdateStats,
+  onDrillComplete,
 }) => {
   const [isActive, setIsActive] = useState<boolean>(false);
   const [isGameOver, setIsGameOver] = useState<boolean>(false);
@@ -35,6 +37,13 @@ export const DrillDeathrun: React.FC<DrillDeathrunProps> = ({
   const [wrongSquare, setWrongSquare] = useState<Square | null>(null);
   const [startTime, setStartTime] = useState<number>(Date.now());
 
+  // Floating feedback
+  const [floatingFeedback, setFloatingFeedback] = useState<{
+    text: string;
+    type: 'bonus' | 'streak' | 'correct' | 'wrong';
+  } | null>(null);
+
+  const recordedRepsRef = useRef<{ square: Square; reactionMs: number; correct: boolean }[]>([]);
   const timerRef = useRef<number | null>(null);
 
   const nextTask = useCallback(() => {
@@ -56,7 +65,16 @@ export const DrillDeathrun: React.FC<DrillDeathrunProps> = ({
       timerRef.current = null;
     }
     soundEngine.playError();
-  }, []);
+
+    if (recordedRepsRef.current.length > 0 && onDrillComplete) {
+      const summary = calculateSessionSummary(
+        'deathrun',
+        recordedRepsRef.current,
+        score
+      );
+      onDrillComplete(summary);
+    }
+  }, [score, onDrillComplete]);
 
   const startGame = () => {
     setIsActive(true);
@@ -66,6 +84,8 @@ export const DrillDeathrun: React.FC<DrillDeathrunProps> = ({
     setTimeLeftSec(5.0);
     setTypedBuffer('');
     setWrongSquare(null);
+    setFloatingFeedback(null);
+    recordedRepsRef.current = [];
     nextTask();
   };
 
@@ -103,6 +123,14 @@ export const DrillDeathrun: React.FC<DrillDeathrunProps> = ({
 
     soundEngine.playCorrect(nextScore, reaction < 500);
 
+    recordedRepsRef.current.push({ square: targetSquare, reactionMs: reaction, correct: true });
+
+    if (reaction < 500) {
+      setFloatingFeedback({ text: `⚡ +0.8s REFLEX! (${reaction}ms)`, type: 'bonus' });
+    } else {
+      setFloatingFeedback({ text: `+0.8s TIME BONUS`, type: 'correct' });
+    }
+
     if (nextScore > highScore) {
       setHighScore(nextScore);
       const updated = {
@@ -117,6 +145,7 @@ export const DrillDeathrun: React.FC<DrillDeathrunProps> = ({
     }
 
     recordAttempt(stats, targetSquare, reaction, true, 'deathrun');
+    setTimeout(() => setFloatingFeedback(null), 400);
     nextTask();
   }, [startTime, score, highScore, stats, onUpdateStats, targetSquare, nextTask]);
 
@@ -131,6 +160,9 @@ export const DrillDeathrun: React.FC<DrillDeathrunProps> = ({
         setTimeout(() => setWrongSquare(null), 250);
       }
 
+      recordedRepsRef.current.push({ square: targetSquare, reactionMs: reaction, correct: false });
+      setFloatingFeedback({ text: `✕ STRIKE!`, type: 'wrong' });
+
       setLives((prev) => {
         const next = prev - 1;
         if (next <= 0) {
@@ -141,6 +173,7 @@ export const DrillDeathrun: React.FC<DrillDeathrunProps> = ({
 
       recordAttempt(stats, targetSquare, reaction, false, 'deathrun');
       setTypedBuffer('');
+      setTimeout(() => setFloatingFeedback(null), 400);
       nextTask();
     },
     [startTime, stats, targetSquare, nextTask, endGame]
@@ -339,11 +372,13 @@ export const DrillDeathrun: React.FC<DrillDeathrunProps> = ({
           wrongSquare={wrongSquare}
           onSquareClick={handleSquareClick}
           interactive={isActive && currentTask === 'click-square'}
+          crosshairGuide={settings.crosshairGuide}
+          floatingFeedback={floatingFeedback}
           size="lg"
         />
 
         {!isActive && !isGameOver && (
-          <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs rounded-xl flex flex-col items-center justify-center p-6 text-center">
+          <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs rounded-2xl flex flex-col items-center justify-center p-6 text-center">
             <Skull className="w-12 h-12 text-red-500 mb-3 animate-pulse" />
             <h3 className="text-2xl font-black text-slate-100 font-mono mb-2">
               Gauntlet Deathrun
@@ -363,7 +398,7 @@ export const DrillDeathrun: React.FC<DrillDeathrunProps> = ({
         )}
 
         {isGameOver && (
-          <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-xs rounded-xl flex flex-col items-center justify-center p-6 text-center animate-pop">
+          <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-xs rounded-2xl flex flex-col items-center justify-center p-6 text-center animate-pop">
             <Trophy className="w-12 h-12 text-amber-400 mb-2" />
             <h3 className="text-3xl font-black text-red-500 font-mono">GAME OVER</h3>
             <p className="text-sm font-mono text-slate-300 mt-1">
