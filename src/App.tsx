@@ -8,7 +8,7 @@ import {
   saveUserStats,
 } from './utils/storage';
 import { soundEngine } from './utils/audio';
-import { Header } from './components/Header';
+import { Sidebar } from './components/Sidebar';
 import { SettingsModal } from './components/SettingsModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { PerformanceRecapModal } from './components/PerformanceRecapModal';
@@ -137,9 +137,9 @@ export function App() {
   }, [settings, handleUpdateSettings]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500/30 selection:text-emerald-200">
-      {/* Top App Header & Mode Nav */}
-      <Header
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row selection:bg-emerald-500/30 selection:text-emerald-200">
+      {/* Left Sidebar Navigation */}
+      <Sidebar
         currentMode={currentMode}
         onSelectMode={(mode) => {
           setTargetSquareOverride(null);
@@ -153,77 +153,79 @@ export function App() {
         stats={stats}
       />
 
-      {/* Main View Area */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 flex flex-col justify-start">
-        {currentMode === 'light-dark' && (
-          <DrillLightDark
-            stats={stats}
-            settings={settings}
-            onUpdateStats={handleUpdateStats}
-            targetSquareOverride={targetSquareOverride}
-            onDrillComplete={handleDrillComplete}
-          />
-        )}
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        <main className="flex-1 max-w-5xl w-full mx-auto px-3 sm:px-6 py-6 sm:py-8 flex flex-col justify-start">
+          {currentMode === 'light-dark' && (
+            <DrillLightDark
+              stats={stats}
+              settings={settings}
+              onUpdateStats={handleUpdateStats}
+              targetSquareOverride={targetSquareOverride}
+              onDrillComplete={handleDrillComplete}
+            />
+          )}
 
-        {currentMode === 'target-strike' && (
-          <DrillTargetStrike
-            stats={stats}
-            settings={settings}
-            onUpdateStats={handleUpdateStats}
-            onUpdateSettings={handleUpdateSettings}
-            targetSquareOverride={targetSquareOverride}
-            activeSubsetSquares={activeSubsetSquares}
-            onDrillComplete={handleDrillComplete}
-          />
-        )}
+          {currentMode === 'target-strike' && (
+            <DrillTargetStrike
+              stats={stats}
+              settings={settings}
+              onUpdateStats={handleUpdateStats}
+              onUpdateSettings={handleUpdateSettings}
+              targetSquareOverride={targetSquareOverride}
+              activeSubsetSquares={activeSubsetSquares}
+              onDrillComplete={handleDrillComplete}
+            />
+          )}
 
-        {currentMode === 'fast-type' && (
-          <DrillFastType
-            stats={stats}
-            settings={settings}
-            onUpdateStats={handleUpdateStats}
-            onUpdateSettings={handleUpdateSettings}
-            targetSquareOverride={targetSquareOverride}
-            activeSubsetSquares={activeSubsetSquares}
-            onDrillComplete={handleDrillComplete}
-          />
-        )}
+          {currentMode === 'fast-type' && (
+            <DrillFastType
+              stats={stats}
+              settings={settings}
+              onUpdateStats={handleUpdateStats}
+              onUpdateSettings={handleUpdateSettings}
+              targetSquareOverride={targetSquareOverride}
+              activeSubsetSquares={activeSubsetSquares}
+              onDrillComplete={handleDrillComplete}
+            />
+          )}
 
-        {currentMode === 'blindfold' && (
-          <DrillBlindfold
-            stats={stats}
-            settings={settings}
-            onUpdateStats={handleUpdateStats}
-          />
-        )}
+          {currentMode === 'blindfold' && (
+            <DrillBlindfold
+              stats={stats}
+              settings={settings}
+              onUpdateStats={handleUpdateStats}
+            />
+          )}
 
-        {currentMode === 'knight-hop' && (
-          <DrillKnightHop
-            stats={stats}
-            settings={settings}
-            onUpdateStats={handleUpdateStats}
-            onUpdateSettings={handleUpdateSettings}
-          />
-        )}
+          {currentMode === 'knight-hop' && (
+            <DrillKnightHop
+              stats={stats}
+              settings={settings}
+              onUpdateStats={handleUpdateStats}
+              onUpdateSettings={handleUpdateSettings}
+            />
+          )}
 
-        {currentMode === 'deathrun' && (
-          <DrillDeathrun
-            stats={stats}
-            settings={settings}
-            onUpdateStats={handleUpdateStats}
-            onUpdateSettings={handleUpdateSettings}
-            onDrillComplete={handleDrillComplete}
-          />
-        )}
+          {currentMode === 'deathrun' && (
+            <DrillDeathrun
+              stats={stats}
+              settings={settings}
+              onUpdateStats={handleUpdateStats}
+              onUpdateSettings={handleUpdateSettings}
+              onDrillComplete={handleDrillComplete}
+            />
+          )}
 
-        {currentMode === 'heatmap' && (
-          <HeatmapAnalytics
-            stats={stats}
-            onSelectTroubleSquare={handleSelectTroubleSquare}
-            onDrillSubset={handleDrillSubset}
-          />
-        )}
-      </main>
+          {currentMode === 'heatmap' && (
+            <HeatmapAnalytics
+              stats={stats}
+              onSelectTroubleSquare={handleSelectTroubleSquare}
+              onDrillSubset={handleDrillSubset}
+            />
+          )}
+        </main>
+      </div>
 
       {/* Performance Recap Modal */}
       <PerformanceRecapModal
