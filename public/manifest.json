@@ -1,0 +1,18 @@
+{
+  "name": "BoardSight — Chess Coordinate Mastery",
+  "short_name": "BoardSight",
+  "description": "Sub-second chess board coordinate recognition and reflex conditioning.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='128' fill='%230f172a'/><rect x='64' y='64' width='192' height='192' fill='%23769656'/><rect x='256' y='64' width='192' height='192' fill='%23eeeed2'/><rect x='64' y='256' width='192' height='192' fill='%23eeeed2'/><rect x='256' y='256' width='192' height='192' fill='%23769656'/><circle cx='352' cy='160' r='36' fill='%2310b981'/></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
