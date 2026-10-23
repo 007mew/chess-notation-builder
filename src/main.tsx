@@ -10,9 +10,10 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
 );
 
 // Register service worker for offline practice
-if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
+    const swUrl = `${import.meta.env.BASE_URL}sw.js`;
+    navigator.serviceWorker.register(swUrl, { scope: import.meta.env.BASE_URL }).catch(() => {
       // offline fallback
     });
   });

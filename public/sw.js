@@ -1,8 +1,8 @@
-const CACHE_NAME = 'boardsight-v1';
+const CACHE_NAME = 'boardsight-v2';
 const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json'
+  './',
+  './index.html',
+  './manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
