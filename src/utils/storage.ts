@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: DrillSettings = {
   showCoordinates: true,
   metronomeBpm: 0,
   crosshairGuide: true,
+  appTheme: 'dark',
 };
 
 function createInitialSquareStats(square: Square): SquareStats {

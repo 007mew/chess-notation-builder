@@ -10,7 +10,8 @@ export type DrillMode =
   | 'fast-type'
   | 'blindfold'
   | 'knight-hop'
-  | 'deathrun';
+  | 'deathrun'
+  | 'memorize';
 
 export type BoardThemeId =
   | 'classic-walnut'
@@ -85,6 +86,7 @@ export interface DrillSettings {
   showCoordinates: boolean;
   metronomeBpm: number; // 0 = off, 60, 90, 120, 150
   crosshairGuide: boolean; // Hover highlights file & rank
+  appTheme: 'dark' | 'light'; // Day/Light vs Dark Mode
 }
 
 export interface SessionSummary {

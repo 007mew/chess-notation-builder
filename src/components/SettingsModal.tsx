@@ -2,7 +2,7 @@ import React from 'react';
 import { BoardThemeId, DrillSettings } from '../types';
 import { BOARD_THEMES } from '../utils/themes';
 import { soundEngine } from '../utils/audio';
-import { Check, Crosshair, Play, RotateCcw, Timer, Volume2, X } from 'lucide-react';
+import { Check, Crosshair, Moon, Play, RotateCcw, Sun, Timer, Volume2, X } from 'lucide-react';
 
 export interface SettingsModalProps {
   isOpen: boolean;
@@ -46,6 +46,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Options List */}
         <div className="py-4 space-y-5 text-sm font-mono">
+          {/* Day / Light Mode vs Dark Mode */}
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">
+              Appearance / Day Mode
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => onUpdateSettings({ ...settings, appTheme: 'dark' })}
+                className={`flex items-center gap-2 p-2.5 rounded-xl border font-bold cursor-pointer transition-all ${
+                  settings.appTheme === 'dark'
+                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400 shadow-sm'
+                    : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <Moon className="w-4 h-4" />
+                <span>Dark Mode</span>
+                {settings.appTheme === 'dark' && <Check className="w-3.5 h-3.5 ml-auto text-emerald-400" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onUpdateSettings({ ...settings, appTheme: 'light' })}
+                className={`flex items-center gap-2 p-2.5 rounded-xl border font-bold cursor-pointer transition-all ${
+                  settings.appTheme === 'light'
+                    ? 'border-amber-500 bg-amber-500/10 text-amber-500 shadow-sm'
+                    : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <Sun className="w-4 h-4 text-amber-500" />
+                <span>Day / Light</span>
+                {settings.appTheme === 'light' && <Check className="w-3.5 h-3.5 ml-auto text-amber-500" />}
+              </button>
+            </div>
+          </div>
+
           {/* Board Themes */}
           <div>
             <label className="block text-xs font-bold text-slate-400 uppercase mb-2">

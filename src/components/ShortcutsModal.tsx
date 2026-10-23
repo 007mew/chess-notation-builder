@@ -10,8 +10,10 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
   if (!isOpen) return null;
 
   const shortcuts = [
-    { key: '1 – 6', description: 'Switch training modes (Mode 1 to Mode 6)' },
+    { key: '1 – 8', description: 'Switch training modes (Mode 1 to Mode 8: Memorize Grid)' },
     { key: '7', description: 'View 8x8 Mastery Heatmap & Diagnostics' },
+    { key: '8', description: 'Open Section 8: Grid Memorization Chart' },
+    { key: 'T', description: 'Toggle Day / Light Mode vs Dark Mode' },
     { key: 'F / J', description: 'Light or Dark? ([F] = Dark, [J] = Light)' },
     { key: 'a–h then 1–8', description: 'Fast Type: Direct coordinate keystrokes' },
     { key: 'Space', description: 'Start / Restart current drill' },

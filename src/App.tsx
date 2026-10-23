@@ -18,6 +18,7 @@ import { DrillFastType } from './components/drills/DrillFastType';
 import { DrillBlindfold } from './components/drills/DrillBlindfold';
 import { DrillKnightHop } from './components/drills/DrillKnightHop';
 import { DrillDeathrun } from './components/drills/DrillDeathrun';
+import { DrillMemorizeGrid } from './components/drills/DrillMemorizeGrid';
 import { HeatmapAnalytics } from './components/HeatmapAnalytics';
 
 export function App() {
@@ -37,6 +38,19 @@ export function App() {
     soundEngine.setSpeechRate(settings.speechRate);
     soundEngine.setMetronome(settings.metronomeBpm);
   }, [settings]);
+
+  // Sync document root class for Day/Light vs Dark theme
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      if (settings.appTheme === 'light') {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.classList.add('light');
+      } else {
+        document.documentElement.classList.remove('light');
+        document.documentElement.classList.add('dark');
+      }
+    }
+  }, [settings.appTheme]);
 
   const handleUpdateSettings = useCallback((newSettings: DrillSettings) => {
     setSettings(newSettings);
@@ -88,7 +102,7 @@ export function App() {
 
       const key = e.key.toLowerCase();
 
-      // Number keys 1-7 for instant mode switching
+      // Number keys 1-8 for instant mode switching
       if (e.key === '1') {
         setCurrentMode('light-dark');
         setTargetSquareOverride(null);
@@ -109,11 +123,20 @@ export function App() {
         setCurrentMode('deathrun');
       } else if (e.key === '7') {
         setCurrentMode('heatmap');
+      } else if (e.key === '8') {
+        setCurrentMode('memorize');
       } else if (key === 'r') {
         // Toggle board perspective
         handleUpdateSettings({
           ...settings,
           perspective: settings.perspective === 'white' ? 'black' : 'white',
+        });
+      } else if (key === 't') {
+        // Toggle day / dark mode
+        const nextTheme = settings.appTheme === 'dark' ? 'light' : 'dark';
+        handleUpdateSettings({
+          ...settings,
+          appTheme: nextTheme,
         });
       } else if (key === 'm') {
         // Toggle sound mute
@@ -136,8 +159,14 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [settings, handleUpdateSettings]);
 
+  const isLight = settings.appTheme === 'light';
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row selection:bg-emerald-500/30 selection:text-emerald-200">
+    <div
+      className={`min-h-screen flex flex-col md:flex-row transition-colors duration-200 selection:bg-emerald-500/30 selection:text-emerald-500 ${
+        isLight ? 'bg-slate-100 text-slate-900' : 'bg-slate-950 text-slate-100'
+      }`}
+    >
       {/* Left Sidebar Navigation */}
       <Sidebar
         currentMode={currentMode}
@@ -222,6 +251,13 @@ export function App() {
               stats={stats}
               onSelectTroubleSquare={handleSelectTroubleSquare}
               onDrillSubset={handleDrillSubset}
+            />
+          )}
+
+          {currentMode === 'memorize' && (
+            <DrillMemorizeGrid
+              settings={settings}
+              onUpdateSettings={handleUpdateSettings}
             />
           )}
         </main>
